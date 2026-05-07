@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>防災全能王：100分終極挑戰版</title>
+    <style>
+        :root {
+            --earthquake-color: #f39c12;
+            --typhoon-color: #3498db;
+            --fire-color: #e74c3c;
+            --boss-color: #8e44ad;
+            --success-color: #2ecc71;
+            --error-color: #e74c3c;
+            --font-main: "Microsoft JhengHei", sans-serif;
+        }
+
+        body { font-family: var(--font-main); background-color: #edf2f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; line-height: 1.6; }
+        #game-board { width: 95%; max-width: 850px; background: rgba(255, 255, 255, 0.98); border-radius: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); padding: 35px; text-align: center; border: 8px solid #ddd; transition: all 0.3s ease; }
+
+        /* 特效設定 */
+        .effect-earthquake { animation: gentle-quake 0.15s infinite; border-color: var(--earthquake-color) !important; }
+        @keyframes gentle-quake { 0%, 100% { transform: translateX(1px); } 50% { transform: translateX(-1px); } }
+        .effect-typhoon { animation: wind 3s infinite ease-in-out; border-color: var(--typhoon-color) !important; }
+        @keyframes wind { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(0.6deg) translateX(5px); } 75% { transform: rotate(-0.6deg) translateX(-5px); } }
+        .effect-fire { animation: fire-glow 1s infinite alternate; border-color: var(--fire-color) !important; }
+        @keyframes fire-glow { from { box-shadow: 0 0 10px rgba(231, 76, 60, 0.2); } to { box-shadow: 0 0 30px rgba(231, 76, 60, 0.5); } }
+        .effect-boss { animation: boss-pulse 2s infinite; border-color: var(--boss-color) !important; background: #f4eef8 !important; }
+        @keyframes boss-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.01); box-shadow: 0 0 40px rgba(142, 68, 173, 0.4); } 100% { transform: scale(1); } }
+
+        #smoke-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, transparent 20%, rgba(80,80,80,0.6) 100%); pointer-events: none; display: none; z-index: 5; }
+
+        /* 介面組件 */
+        .explanation-card { text-align: left; background: #fff; border-radius: 15px; padding: 25px; margin: 20px 0; border-left: 10px solid #ccc; }
+        .explanation-card.earthquake { border-left-color: var(--earthquake-color); }
+        .explanation-card.typhoon { border-left-color: var(--typhoon-color); }
+        .explanation-card.fire { border-left-color: var(--fire-color); }
+        .explanation-card.boss { border-left-color: var(--boss-color); }
+        .scene-display { font-size: 1.5rem; font-weight: bold; padding: 30px; background: #fff9db; border-radius: 15px; margin-bottom: 20px; line-height: 1.4; }
+        .option-btn { padding: 15px; font-size: 1.15rem; background: white; border: 2px solid #eee; border-radius: 12px; cursor: pointer; transition: 0.2s; margin-bottom: 12px; width: 100%; }
+        .option-btn:hover { background: #f0f7ff; border-color: var(--typhoon-color); transform: translateY(-2px); }
+        .nav-btn { padding: 15px 45px; font-size: 1.3rem; background: var(--success-color); color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
+        
+        /* 結算表格 */
+        .review-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.95rem; }
+        .review-table th, .review-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        .status-correct { color: var(--success-color); font-weight: bold; }
+        .status-wrong { color: var(--error-color); font-weight: bold; }
+        .correct-hint { color: #666; font-size: 0.85rem; display: block; border-top: 1px dashed #eee; margin-top: 4px; }
+
+        .hidden { display: none !important; }
+        #feedback { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 30px 60px; border-radius: 20px; color: white; font-size: 2.5rem; font-weight: bold; z-index: 1000; display: none; }
+    </style>
+</head>
+<body>
+
+<div id="smoke-overlay"></div>
+
+<div id="game-board">
+    <div id="home-screen">
+        <h1 style="font-size: 2.5rem;">🛡️ 防災全能王 🛡️</h1>
+        <p style="font-size: 1.2rem;">挑戰 3 大防災關卡 + 最終任務，奪取 100 分榮譽！</p>
+        <button class="nav-btn" onclick="showExplanation(0)">開始挑戰</button>
+    </div>
+
+    <div id="explain-screen" class="hidden">
+        <h2 id="explain-title"></h2>
+        <div id="explain-container"></div>
+        <button class="nav-btn" onclick="startStage()">進入任務</button>
+    </div>
+
+    <div id="play-screen" class="hidden">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-weight: bold;">
+            <span id="current-stage-name"></span>
+            <span style="color: var(--fire-color);">目前總分：<span id="live-score">0</span></span>
+        </div>
+        <div class="scene-display" id="scene-text"></div>
+        <div id="option-list"></div>
+    </div>
+
+    <div id="end-screen" class="hidden">
+        <h1 id="rank-title"></h1>
+        <div style="font-size: 1.8rem; margin: 15px 0;">最終得分：<span id="final-score" style="color:red; font-weight:bold;"></span> / 100</div>
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 10px;">
+            <table class="review-table" id="review-body">
+                <thead><tr><th>題目</th><th>答題狀況與解析</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <br>
+        <button class="nav-btn" onclick="location.reload()">重新挑戰</button>
+    </div>
+</div>
+
+<div id="feedback"></div>
+
+<script>
+const questionBank = {
+    earthquake: [
+        { q: "地震發生時在教室，第一時間應？", a: ["躲在桌下抓緊桌腳", "立刻衝出教室", "躲在窗戶旁邊"], correct: 0 },
+        { q: "關於地震避難三步驟，順序是？", a: ["跑、躲、跳", "趴下、掩護、穩住", "開門、拿包、下樓"], correct: 1 },
+        { q: "疏散時若身在走廊，應注意？", a: ["遠離玻璃窗與吊掛物", "靠在欄杆往下看", "加速快跑"], correct: 0 },
+        { q: "地震搖晃停止後撤離，不可搭乘？", a: ["樓梯", "貨梯或電梯", "坡道"], correct: 1 },
+        { q: "在家睡覺被強震驚醒，第一步是？", a: ["留在床上用枕頭護頭", "立刻下床躲進廚房", "跑去陽台求救"], correct: 0 },
+        { q: "地震發生在電梯內，應該？", a: ["按每個樓層並在開門處逃出", "在電梯中心跳躍", "強制扳開門"], correct: 0 },
+        { q: "地震防災演習時，應遵守？", a: ["不推、不跑、不語", "大聲喊叫提醒別人", "跑得越快越好"], correct: 0 },
+        { q: "地震時最危險的地方通常是？", a: ["窗戶附近", "桌子下", "空曠地區"], correct: 0 },
+        { q: "地震後若聞到瓦斯味，應？", a: ["立刻開燈檢查", "關閉瓦斯並開窗", "點火確認來源"], correct: 1 },
+        { q: "地震時在戶外應遠離？", a: ["建築物與招牌", "公園", "操場"], correct: 0 },
+        { q: "地震時開車中應？", a: ["急速煞車", "減速靠邊停車", "加速離開"], correct: 1 },
+        { q: "地震後撤離前應先？", a: ["確認安全", "拿所有財物", "拍照打卡"], correct: 0 },
+        { q: "地震包中最重要的物品之一是？", a: ["遊戲機", "飲水", "化妝品"], correct: 1 },
+        { q: "地震時若在廚房，應優先？", a: ["關閉火源", "拿食物", "躲進冰箱旁"], correct: 0 },
+        { q: "地震造成停電時，不宜使用？", a: ["手電筒", "打火機", "收音機"], correct: 1 },
+        { q: "地震後若有餘震，應？", a: ["保持警戒", "立刻回屋內", "站在窗邊"], correct: 0 },
+        { q: "地震時保護頭部可使用？", a: ["書包", "玻璃杯", "拖鞋"], correct: 0 },
+        { q: "地震時若在百貨公司，應？", a: ["聽從廣播指示", "衝向電梯", "躲在展示櫃旁"], correct: 0 },
+        { q: "地震時在捷運內應？", a: ["抓穩扶手", "強行開門", "跳下軌道"], correct: 0 },
+        { q: "地震後建築物若有裂縫，應？", a: ["避免靠近", "繼續待著", "敲打牆壁"], correct: 0 },
+        { q: "防災地圖的用途是？", a: ["了解避難路線", "查餐廳", "找停車位"], correct: 0 },
+        { q: "地震時在海邊應注意？", a: ["海嘯警報", "撿貝殼", "觀浪"], correct: 0 },
+        { q: "地震後手機應優先用來？", a: ["報平安", "打遊戲", "看影片"], correct: 0 },
+        { q: "地震時應避免使用？", a: ["電梯", "樓梯", "安全門"], correct: 0 },
+        { q: "地震避難時，頭部受傷風險最高來自？", a: ["掉落物", "鞋子", "地板"], correct: 0 },
+        { q: "地震後若受團，應？", a: ["敲擊求救", "大力奔跑", "持續尖叫"], correct: 0 },
+        { q: "地震發生時在操場，應？", a: ["蹲低保護頭部", "衝回教室", "靠近司令台"], correct: 0 },
+        { q: "地震包建議多久檢查一次？", a: ["定期檢查", "永遠不用", "十年一次"], correct: 0 },
+        { q: "地震時最安全的姿勢之一是？", a: ["趴下", "跳起來", "站直"], correct: 0 },
+        { q: "地震時若戴安全帽，主要保護？", a: ["頭部", "手臂", "鞋子"], correct: 0 },
+        { q: "地震後不要靠近哪裡？", a: ["電線桿", "空地", "公園"], correct: 0 },
+        { q: "地震時若在圖書館，應遠離？", a: ["書架", "桌子", "出口"], correct: 0 },
+        { q: "地震時躲桌下應抓住？", a: ["桌腳", "椅背", "鞋帶"], correct: 0 },
+        { q: "地震後應收聽？", a: ["官方資訊", "謠言", "網路猜測"], correct: 0 },
+        { q: "地震發生時最重要的是？", a: ["保持冷靜", "立刻錄影", "收拾行李"], correct: 0 },
+        { q: "地震時若在山區應注意？", a: ["落石", "海浪", "雷電"], correct: 0 },
+        { q: "地震後停水時，飲水應？", a: ["節約使用", "全部倒掉", "大量玩水"], correct: 0 },
+        { q: "地震後建築傾斜時應？", a: ["盡速撤離", "繼續待著", "拍照欣賞"], correct: 0 },
+        { q: "地震時不要躲在哪？", a: ["玻璃旁", "堅固桌下", "柱子旁"], correct: 0 },
+        { q: "地震包中適合準備？", a: ["簡易醫藥品", "大型電視", "玻璃花瓶"], correct: 0 },
+        { q: "地震時若正在煮飯，應？", a: ["關火", "繼續煮", "跑去洗澡"], correct: 0 },
+        { q: "地震發生時不建議？", a: ["推擠逃跑", "保護頭部", "穩住身體"], correct: 0 },
+        { q: "地震時應遠離哪類家具？", a: ["高櫃", "矮桌", "地墊"], correct: 0 },
+        { q: "地震後若道路受損，應？", a: ["改道通行", "硬闖", "邊走邊玩"], correct: 0 },
+        { q: "地震時若在商場手扶梯上，應？", a: ["握緊扶手", "跳下去", "逆向奔跑"], correct: 0 },
+        { q: "地震後若接獲不明消息，應？", a: ["查證來源", "立刻轉傳", "完全相信"], correct: 0 },
+        { q: "地震時若在浴室，應？", a: ["保護頭部", "站著不動", "跳進浴缸"], correct: 0 },
+        { q: "地震後應檢查家中？", a: ["水電瓦斯", "玩具", "裝飾品"], correct: 0 },
+        { q: "地震時手機沒訊號，應？", a: ["簡訊報平安", "一直重撥", "摔手機"], correct: 0 },
+        { q: "地震防災最重要的觀念是？", a: ["平時準備", "臨時再說", "不用在意"], correct: 0 }
+    ],
+    typhoon: [
+        { q: "颱風警報發布後，不應該去哪裡？", a: ["家裡的書房", "海邊觀浪或戲水", "學校教室"], correct: 1 },
+        { q: "颱風來臨前，陽台的盆栽應？", a: ["搬進室內或放到地面固定", "澆水澆得更濕", "懸掛在欄杆外"], correct: 0 },
+        { q: "低窪地區預防淹水，應準備？", a: ["雨傘", "堆疊沙包", "大臉盆"], correct: 1 },
+        { q: "颱風造成停電，應優先使用？", a: ["蠟燭", "手電筒", "火把"], correct: 1 },
+        { q: "看新聞說有強烈颱風，家裡的膠帶可以用來？", a: ["貼在窗戶加強支撐", "貼在地面防滑", "綑綁盆栽"], correct: 0 },
+        { q: "颱風過後，若看到電線斷落應？", a: ["上前移開它", "不觸碰並通知台電", "拿起來看有沒有電"], correct: 1 },
+        { q: "颱風天外出應避免？", a: ["地下道", "室內", "捷運站"], correct: 0 },
+        { q: "颱風來臨前應儲備？", a: ["飲水與食物", "煙火", "酒精飲料"], correct: 0 },
+        { q: "颱風時窗戶應？", a: ["關緊", "全部打開", "拆掉"], correct: 0 },
+        { q: "颱風時若淹水，不宜？", a: ["接觸積水", "待在高處", "注意警報"], correct: 0 },
+        { q: "颱風來臨前，手機應？", a: ["充飽電", "關機", "丟旁邊"], correct: 0 },
+        { q: "颱風期間停電時，不建議？", a: ["使用蠟燭", "使用手電筒", "節約用電"], correct: 0 },
+        { q: "颱風天開車遇積水應？", a: ["避免強行通過", "加速衝過", "停在水中央"], correct: 0 },
+        { q: "颱風警報分為？", a: ["海上與陸上", "紅黃藍", "強弱兩種"], correct: 0 },
+        { q: "颱風時應收聽？", a: ["官方消息", "網路謠言", "鄰居猜測"], correct: 0 },
+        { q: "颱風前家中排水孔應？", a: ["清理暢通", "完全溝通", "丟垃圾"], correct: 0 },
+        { q: "颱風天若必須外出應？", a: ["穿雨具注意安全", "赤腳出門", "邊走邊玩"], correct: 0 },
+        { q: "颱風造成淹水時應避免？", a: ["觸碰電器", "關閉電源", "遠離危險"], correct: 0 },
+        { q: "颱風時最危險的行為是？", a: ["觀浪", "待在室內", "查看新聞"], correct: 0 },
+        { q: "颱風前應固定？", a: ["招牌與物品", "地板", "牆壁"], correct: 0 },
+        { q: "颱風天河川區域應？", a: ["避免前往", "露營", "釣魚"], correct: 0 },
+        { q: "颱風時如果停水，應？", a: ["節約用水", "一直玩水", "全部倒光"], correct: 0 },
+        { q: "颱風過後道路積水可能有？", a: ["坑洞", "糖果", "魚池"], correct: 0 },
+        { q: "颱風天若有撤離通知，應？", a: ["配合撤離", "繼續睡覺", "跑去觀浪"], correct: 0 },
+        { q: "颱風期間家中玻璃窗旁應避免？", a: ["久留", "拉窗簾", "注意風勢"], correct: 0 },
+        { q: "颱風時地下室容易？", a: ["積水", "下雪", "結冰"], correct: 0 },
+        { q: "颱風來臨前車輛應？", a: ["停高處", "停河邊", "停海邊"], correct: 0 },
+        { q: "颱風天適合進行？", a: ["居家防災", "登山", "泛舟"], correct: 0 },
+        { q: "颱風後食物若泡水，應？", a: ["丟棄", "繼續吃", "曬乾再吃"], correct: 0 },
+        { q: "颱風時若屋頂漏水，應？", a: ["注意安全處理", "爬屋頂修理", "不理它"], correct: 0 },
+        { q: "颱風天風雨強烈時應？", a: ["留在室內", "騎腳踏車", "打球"], correct: 0 },
+        { q: "颱風時海邊浪高原因是？", a: ["強風影響", "船太多", "海水變熱"], correct: 0 },
+        { q: "颱風前應準備的照明工具是？", a: ["手電筒", "仙女棒", "火把"], correct: 0 },
+        { q: "颱風期間應避免傳播？", a: ["假消息", "官方公告", "避難資訊"], correct: 0 },
+        { q: "颱風後看到招牌搖晃應？", a: ["遠離", "靠近觀看", "觸碰"], correct: 0 },
+        { q: "颱風來臨前冰箱可？", a: ["預先冷藏食物", "關閉不用", "搬到戶外"], correct: 0 },
+        { q: "颱風時若住山區，需注意？", a: ["土石流", "海嘯", "冰雹"], correct: 0 },
+        { q: "颱風過後外出應注意？", a: ["道路安全", "玩積水", "追風拍照"], correct: 0 },
+        { q: "颱風天不宜從事？", a: ["水上活動", "閱讀", "下棋"], correct: 0 },
+        { q: "颱風來時應優先確認？", a: ["家人安全", "電視節目", "遊戲排名"], correct: 0 },
+        { q: "颱風時門窗若損壞應？", a: ["暫時固定", "完全不管", "敲破玻璃"], correct: 0 },
+        { q: "颱風期間停電後食物保存應？", a: ["減少開冰箱", "一直打開", "拿去曬太陽"], correct: 0 },
+        { q: "颱風時若有淹水警報，應？", a: ["提高警覺", "出門游泳", "靠近觀察"], correct: 0 },
+        { q: "颱風天騎車時應？", a: ["降低速度", "放雙手", "快速競速"], correct: 0 },
+        { q: "颱風前應檢查？", a: ["緊急用品", "玩具收藏", "電玩紀錄"], correct: 0 },
+        { q: "颱風時若聽到巨響，應？", a: ["注意周遭安全", "立刻衝出去", "打開窗戶"], correct: 0 },
+        { q: "颱風後清理家園時應？", a: ["戴手套", "赤手清理", "赤腳工作"], correct: 0 },
+        { q: "颱風來時，哪裡最安全？", a: ["堅固室內", "海堤", "屋頂"], correct: 0 },
+        { q: "颱風防災最重要的是？", a: ["提前準備", "臨時亂跑", "忽略警報"], correct: 0 }
+    ],
+    fire: [
+        { q: "火災逃生時，如果門把摸起來很燙？", a: ["勇敢衝出去", "不可開門，改尋其他出口", "用冷水澆門把"], correct: 1 },
+        { q: "火場充滿濃煙時，該如何移動？", a: ["站直大步跑過", "低姿勢爬行尋找新鮮空氣", "跳窗"], correct: 1 },
+        { q: "火災逃生時的優先選擇是？", a: ["電梯", "樓梯", "窗戶"], correct: 1 },
+        { q: "發現小火可以使用什麼初期滅火？", a: ["電風扇", "滅火器", "厚重的棉被"], correct: 1 },
+        { q: "身上衣服著火時應？", a: ["停、下、滾", "快跑讓風吹熄", "找水源潑水"], correct: 0 },
+        { q: "火災時最致命的威脅通常是？", a: ["火焰", "濃煙", "爆炸聲"], correct: 1 },
+        { q: "火災時不可搭乘？", a: ["電梯", "樓梯", "安全門"], correct: 0 },
+        { q: "發現火災第一步應？", a: ["通知他人", "自拍", "睡覺"], correct: 0 },
+        { q: "火場逃生時應？", a: ["保持冷靜", "推擠他人", "逆向奔跑"], correct: 0 },
+        { q: "火災時若濃煙很多，可用什麼遮住口鼻？", a: ["濕毛巾", "塑膠袋", "紙張"], correct: 0 },
+        { q: "火災時應優先往哪逃？", a: ["安全出口", "頂樓", "地下室"], correct: 0 },
+        { q: "電器起火時應先？", a: ["切斷電源", "潑水", "靠近查看"], correct: 0 },
+        { q: "油鍋起火時不應？", a: ["潑水", "蓋鍋蓋", "關火"], correct: 0 },
+        { q: "火災警報響起時應？", a: ["立即確認與避難", "當作惡作劇", "繼續睡"], correct: 0 },
+        { q: "火災時逃生路線應？", a: ["事先熟悉", "臨時找", "跟著亂跑"], correct: 0 },
+        { q: "濃煙通常會往哪裡聚集？", a: ["上方", "地面", "地下"], correct: 0 },
+        { q: "火災時若受困，可到哪等待救援？", a: ["有窗房間", "電梯", "廚房"], correct: 0 },
+        { q: "逃生時應隨手？", a: ["關門", "開冷氣", "鎖門"], correct: 0 },
+        { q: "火災發生時不宜？", a: ["返回拿財物", "立刻避難", "通知他人"], correct: 0 },
+        { q: "滅火器使用口訣是？", a: ["拉瞄壓掃", "開關開關", "噴跑跳躲"], correct: 0 },
+        { q: "火災時應避免吸入？", a: ["濃煙", "新鮮空氣", "氧氣"], correct: 0 },
+        { q: "火災時若衣服冒煙應？", a: ["停下翻滾", "一直奔跑", "躲起來"], correct: 0 },
+        { q: "家中應安裝？", a: ["住宅用火災警報器", "霓虹燈", "音響"], correct: 0 },
+        { q: "火災時若門外有煙，應？", a: ["不要開門", "立刻衝出", "趴門偷看"], correct: 0 },
+        { q: "火災時最安全的移動方式是？", a: ["低姿勢前進", "跳著走", "奔跑"], correct: 0 },
+        { q: "逃生時看到濃煙應？", a: ["避開", "吸一口看看", "靠近觀察"], correct: 0 },
+        { q: "電線走火可能原因是？", a: ["超載", "太安靜", "太乾淨"], correct: 0 },
+        { q: "火災時手機應優先？", a: ["報警求救", "拍影片", "直播"], correct: 0 },
+        { q: "火場逃生時鞋子應？", a: ["穿著", "脫掉", "丟掉"], correct: 0 },
+        { q: "火災發生時，孩童應？", a: ["聽從大人指示", "自己亂跑", "躲衣櫃"], correct: 0 },
+        { q: "火災時樓梯間有煙，應？", a: ["尋找其他出口", "衝進煙裡", "搭電梯"], correct: 0 },
+        { q: "瓦斯外洩時不應？", a: ["開電燈", "關瓦斯", "開窗"], correct: 0 },
+        { q: "火災發生時最重要的是？", a: ["保命", "拿財物", "拍照"], correct: 0 },
+        { q: "火場濃煙有毒，因此應？", a: ["降低身體高度", "深呼吸", "站高處"], correct: 0 },
+        { q: "滅火器噴嘴應對準？", a: ["火源根部", "天空", "牆壁"], correct: 0 },
+        { q: "火災時應避免使用？", a: ["電梯", "樓梯", "手電筒"], correct: 0 },
+        { q: "火災逃生時應注意？", a: ["逃生方向", "穿搭", "髮型"], correct: 0 },
+        { q: "火災時若被困陽台，應？", a: ["揮舞明顯物品求救", "直接跳下", "躲起來"], correct: 0 },
+        { q: "火災時應遠離？", a: ["易燃物", "出口", "空地"], correct: 0 },
+        { q: "家中延長線不可？", a: ["過度使用", "正常使用", "定期檢查"], correct: 0 },
+        { q: "火災時若吸入濃煙可能？", a: ["窒息", "變高", "更有力氣"], correct: 0 },
+        { q: "火災發生時窗戶應？", a: ["視情況開啟", "全部打開", "敲碎"], correct: 0 },
+        { q: "火災逃生集合後應？", a: ["清點人數", "自行離開", "返回火場"], correct: 0 },
+        { q: "火災時應避免哪種行為？", a: ["推擠", "互相協助", "聽指示"], correct: 0 },
+        { q: "火災初期若無法控制，應？", a: ["立刻撤離", "繼續冒險滅火", "關起來不管"], correct: 0 },
+        { q: "火災時適合穿？", a: ["包覆性鞋子", "拖鞋", "赤腳"], correct: 0 },
+        { q: "火災時若煙很大，應？", a: ["貼近地面", "站高處", "跑最快"], correct: 0 },
+        { q: "火災逃生演練的目的？", a: ["熟悉避難", "增加作業", "浪費時間"], correct: 0 },
+        { q: "火災時若無法逃生，應？", a: ["封門等待救援", "躲棉被", "亂跑"], correct: 0 },
+        { q: "預防火災最重要的是？", a: ["平時注意安全", "完全不管", "只靠運氣"], correct: 0 }
+    ],
+    boss: [
+        { q: "地震發生時，如果人在高樓層且樓梯間已出現明顯裂縫，最適合的做法是？", a: ["立刻衝下樓", "暫時待在相對安全處等待指示", "搭電梯快速離開"], correct: 1 },
+        { q: "地震後聞到瓦斯味，但同時室內很暗，最危險的行為是？", a: ["打開手電筒", "打開窗戶", "開燈確認狀況"], correct: 2 },
+        { q: "火災時若逃生通道充滿濃煙，但房內暫時安全，應優先？", a: ["強行衝出去", "留在原地並封閉門縫求救", "躲進浴室"], correct: 1 },
+        { q: "颱風豪雨期間，地下道已開始積水，此時最危險的是？", a: ["步行穿越", "改走高處道路", "留意警戒線"], correct: 0 },
+        { q: "地震時若正在使用瓦斯爐，且搖晃劇烈站不穩，應？", a: ["先保護自身安全", "一定要立刻關火", "拿鍋子逃跑"], correct: 0 },
+        { q: "火災中最容易造成大量傷亡的原因通常是？", a: ["建築倒塌", "高溫灼傷", "濃煙與有毒氣體"], correct: 2 },
+        { q: "海邊發生強震後，海水突然快速後退代表？", a: ["潮汐現象", "海嘯可能即將發生", "可以去撿魚"], correct: 1 },
+        { q: "地震避難時，「黃金三角理論」目前較推薦嗎？", a: ["是，全球標準", "否，多數防災單位仍以趴下掩護穩住為主", "只適用台灣"], correct: 1 },
+        { q: "火災逃生時，若門外沒有煙但門把燙手，代表？", a: ["門後可能已有高溫火源", "可以快速衝出去", "門壞掉了"], correct: 0 },
+        { q: "颱風停電時，使用發電機最危險的情況是？", a: ["放在室外通風處", "放在室內運轉", "定期補充燃料"], correct: 1 },
+        { q: "地震後若手機無訊號，最適合的方式是？", a: ["不斷重撥電話", "使用簡訊報平安", "關機等待"], correct: 1 },
+        { q: "火災時若衣服著火，「停、躺、滾」的主要原因是？", a: ["增加氧氣", "壓制火焰與隔絕空氣", "比較容易被看到"], correct: 1 },
+        { q: "颱風期間，哪種情況最容易發生土石流？", a: ["山區連續豪雨", "天氣晴朗", "海風增強"], correct: 0 },
+        { q: "地震時在百貨公司，最不適合躲在哪？", a: ["展示玻璃旁", "柱子附近", "櫃台下方"], correct: 0 },
+        { q: "火場中往上跑到頂樓等待救援，什麼情況下最合理？", a: ["樓梯仍可安全下樓時", "下方逃生路線已被火煙阻斷時", "想看火勢"], correct: 1 },
+        { q: "颱風淹水時，積水區最危險但最容易被忽略的是？", a: ["水溫太低", "看不見的通電設備", "泥巴很多"], correct: 1 },
+        { q: "地震時若在捷運車廂內，最佳做法是？", a: ["強行開門逃離", "留在車內聽從指示", "打破窗戶"], correct: 1 },
+        { q: "火災濃煙向上聚集，因此逃生時低姿勢前進是因為？", a: ["比較不累", "下方氧氣較多", "容易跑步"], correct: 1 },
+        { q: "地震後若大樓傾斜但尚未倒塌，應？", a: ["立刻回家拿東西", "遠離建築物", "在旁邊觀察"], correct: 1 },
+        { q: "颱風時看到鐵皮被風吹掀，應？", a: ["靠近拍攝", "遠離並尋找掩蔽", "徒手壓住"], correct: 1 },
+        { q: "火災時若逃生途中遇到濃煙突然增加，最適合？", a: ["深呼吸衝過去", "改變逃生方向", "站著觀察"], correct: 1 },
+        { q: "地震後第一時間查核建築安全時，不應只觀察？", a: ["外牆裂縫", "樓梯變形", "家具擺放整齊度"], correct: 2 },
+        { q: "颱風撤離通知發布時，最危險的心態是？", a: ["提前準備", "等看看再說", "配合疏散"], correct: 1 },
+        { q: "火災時躲進浴室等待救援通常不建議，因為？", a: ["水太少", "多數浴室無對外逃生出口", "地板太滑"], correct: 1 },
+        { q: "地震與火災複合災害時，最重要的原則是？", a: ["優先保護財物", "依現場最大危險動態判斷", "跟著最多人跑"], correct: 1 }
+    ]
+};
+
+const stages = [
+    { key: "earthquake", name: "地震", effect: "effect-earthquake", explanation: `<div class="explanation-card earthquake"><ul><li><span class="tip-tag">避難三步驟</span> <b>趴下、掩護、穩住</b>，保護頭部。</li><li><span class="tip-tag">三不原則</span> 不推、不跑、不語。</li></ul></div>` },
+    { key: "typhoon", name: "颱風", effect: "effect-typhoon", explanation: `<div class="explanation-card typhoon"><ul><li><span class="tip-tag">物資儲備</span> 準備 3 日份乾糧飲水。</li><li><span class="tip-tag">避險</span> 絕不去海邊或山區。</li></ul></div>` },
+    { key: "fire", name: "火災", effect: "effect-fire", explanation: `<div class="explanation-card fire"><ul><li><span class="tip-tag">低姿勢</span> 濃煙中爬行找新鮮空氣。</li><li><span class="tip-tag">燙手不開門</span> 摸門把燙手代表門後有火。</li></ul></div>` },
+    { key: "boss", name: "最終任務", effect: "effect-boss", explanation: `<div class="explanation-card boss"><p>恭喜來到最後一關！這裡將測試你的綜合防災直覺，只有最冷靜的防災王能拿到滿分！</p></div>` }
+];
+
+let curStageIdx = 0, curQIdx = 0, totalScore = 0;
+let selectedQuestions = [];
+let history = [];
+
+function showExplanation(idx) {
+    curStageIdx = idx;
+    document.getElementById('home-screen').classList.add('hidden');
+    document.getElementById('play-screen').classList.add('hidden');
+    document.getElementById('game-board').className = "";
+    document.getElementById('smoke-overlay').style.display = 'none';
+
+    const screen = document.getElementById('explain-screen');
+    screen.classList.remove('hidden');
+    document.getElementById('explain-title').innerText = `【${stages[idx].name}任務】重點摘要`;
+    document.getElementById('explain-container').innerHTML = stages[idx].explanation;
+
+    const pool = [...questionBank[stages[idx].key]];
+    const count = (stages[idx].key === 'boss') ? 1 : 3;
+    selectedQuestions = pool.sort(() => Math.random() - 0.5).slice(0, count);
+}
+
+function startStage() {
+    document.getElementById('explain-screen').classList.add('hidden');
+    document.getElementById('play-screen').classList.remove('hidden');
+    curQIdx = 0;
+    document.getElementById('game-board').className = stages[curStageIdx].effect;
+    if(stages[curStageIdx].key === "fire") document.getElementById('smoke-overlay').style.display = 'block';
+    loadQuestion();
+}
+
+function loadQuestion() {
+    const qData = selectedQuestions[curQIdx];
+    document.getElementById('current-stage-name').innerText = stages[curStageIdx].key === 'boss' ? "🌟 最終任務" : `${stages[curStageIdx].name}測驗 (${curQIdx+1}/3)`;
+    document.getElementById('scene-text').innerText = qData.q;
+
+    const list = document.getElementById('option-list');
+    list.innerHTML = "";
+    qData.a.forEach((text, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.innerText = text;
+        btn.onclick = () => checkAnswer(i);
+        list.appendChild(btn);
+    });
+}
+
+function checkAnswer(idx) {
+    const qData = selectedQuestions[curQIdx];
+    const isCorrect = (idx === qData.correct);
+    const feedback = document.getElementById('feedback');
+    feedback.style.display = 'block';
+    
+    if(isCorrect) {
+        feedback.innerText = "正確！✨";
+        feedback.style.backgroundColor = "#2ecc71";
+        totalScore += 10;
+        document.getElementById('live-score').innerText = totalScore;
+    } else {
+        feedback.innerText = "答錯了 😭";
+        feedback.style.backgroundColor = "#e74c3c";
+    }
+
+    history.push({ q: qData.q, userAns: qData.a[idx], correctAns: qData.a[qData.correct], isCorrect: isCorrect });
+
+    setTimeout(() => {
+        feedback.style.display = 'none';
+        curQIdx++;
+        if(curQIdx < selectedQuestions.length) {
+            loadQuestion();
+        } else if(curStageIdx < stages.length - 1) {
+            showExplanation(curStageIdx + 1);
+        } else {
+            showEnd();
+        }
+    }, 1100);
+}
+
+function showEnd() {
+    document.getElementById('play-screen').classList.add('hidden');
+    document.getElementById('end-screen').classList.remove('hidden');
+    document.getElementById('game-board').className = "";
+    document.getElementById('smoke-overlay').style.display = 'none';
+    document.getElementById('final-score').innerText = totalScore;
+
+    const tbody = document.querySelector('#review-body tbody');
+    tbody.innerHTML = "";
+    history.forEach(item => {
+        const statusClass = item.isCorrect ? "status-correct" : "status-wrong";
+        const userDisplay = item.isCorrect ? item.userAns : `${item.userAns} (X)`;
+        tbody.innerHTML += `
+            <tr>
+                <td>${item.q}</td>
+                <td>
+                    <span class="${statusClass}">${userDisplay}</span>
+                    ${!item.isCorrect ? `<span class="correct-hint">✅ 正確做法：${item.correctAns}</span>` : ""}
+                </td>
+            </tr>`;
+    });
+
+    let title = totalScore === 100 ? "🏆 終極防災守護神" : totalScore >= 70 ? "🎖️ 防災指揮官" : "🛡️ 實習救難員";
+    document.getElementById('rank-title').innerText = title;
+}
+</script>
+</body>
+</html>
